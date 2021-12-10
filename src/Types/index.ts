@@ -4,6 +4,7 @@ export * from './Chat'
 export * from './Contact'
 export * from './State'
 export * from './Message'
+export * from './statusFind'
 
 import type EventEmitter from "events"
 import type { Agent } from "https"
@@ -15,6 +16,7 @@ import { AuthenticationState, AuthenticationCreds } from './Auth'
 import { Chat, PresenceData } from './Chat'
 import { Contact } from './Contact'
 import { ConnectionState } from './State'
+import { State } from './statusFind'
 
 import { GroupMetadata, ParticipantAction } from './GroupMetadata'
 import { MessageInfoUpdate, MessageUpdateType, WAMessage, WAMessageUpdate, WAMessageKey } from './Message'
@@ -30,21 +32,21 @@ export type SocketConfig = {
     /** the WS url to connect to WA */
     waWebSocketUrl: string | URL 
     /** Fails the connection if the socket times out in this interval */
-	connectTimeoutMs: number
+		connectTimeoutMs: number
     /** Default timeout for queries, undefined for no timeout */
     defaultQueryTimeoutMs: number | undefined
     /** ping-pong interval for WS connection */
     keepAliveIntervalMs: number
     /** proxy agent */
-	agent?: Agent
+		agent?: Agent
     /** pino logger */
-	logger: Logger
+		logger: Logger
     /** version to connect with */
     version: WAVersion
     /** override browser config */
-	browser: WABrowserDescription
-	/** agent used for fetch requests -- uploading/downloading media */
-	fetchAgent?: Agent
+		browser: WABrowserDescription
+		/** agent used for fetch requests -- uploading/downloading media */
+		fetchAgent?: Agent
     /** should the QR be printed in the terminal */
     printQRInTerminal: boolean
     /** should events be emitted for actions done by this socket connection */
@@ -103,8 +105,10 @@ export type WABusinessProfile = {
 export type CurveKeyPair = { private: Uint8Array; public: Uint8Array }
 
 export type BaileysEventMap = {
+	  /** statusFind */
+		'statusFind':  Partial<State>
     /** connection state has been updated -- WS closed, opened, connecting etc. */
-	'connection.update': Partial<ConnectionState>
+		'connection.update': Partial<ConnectionState>
     /** credentials updated -- some metadata, keys or something */
     'creds.update': Partial<AuthenticationCreds>
     /** set chats (history sync), messages are reverse chronologically sorted */

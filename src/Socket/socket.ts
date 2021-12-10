@@ -169,6 +169,10 @@ export const makeSocket = ({
         if(!creds.me) {
             logger.info('not logged in, attempting registration...')
             node = generateRegistrationNode(creds, { version, browser })
+
+							ev.emit('statusFind', { 
+								statusFind: 'notLogged'
+						})
         } else {
             logger.info('logging in...')
             node = generateLoginNode(creds.me!.id, { version, browser })
@@ -203,7 +207,7 @@ export const makeSocket = ({
 
         const preKeys = await getPreKeys(authState.keys, preKeysRange[0], preKeysRange[0] + preKeysRange[1])
         await execute(preKeys)
-
+	
         ev.emit('creds.update', update)
     }
     /** generates and uploads a set of pre-keys */
@@ -288,12 +292,22 @@ export const makeSocket = ({
                 date: new Date()
             } 
         })
+
+				ev.emit('statusFind', { 
+					statusFind: 'isDisconnected'
+			})
+
         ev.removeAllListeners('connection.update')
 	}
 
     const waitForSocketOpen = async() => {
         if(ws.readyState === ws.OPEN) return
         if(ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
+					
+					ev.emit('statusFind', { 
+						statusFind: 'isDisconnected'
+				})
+
             throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
         }
         let onOpen: () => void
@@ -321,6 +335,11 @@ export const makeSocket = ({
                 it could be that the network is down
             */
             if (diff > keepAliveIntervalMs+5000) {
+
+							ev.emit('statusFind', { 
+								statusFind: 'isDisconnected'
+						})
+
                 end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost }))
             } else if(ws.readyState === ws.OPEN) {
                 // if its all good, send a keep alive request
@@ -385,8 +404,11 @@ export const makeSocket = ({
                 ]
             })
         }
+				ev.emit('statusFind', { 
+					statusFind: 'isDisconnected'
+			})
 
-        end(new Boom('Intentional Logout', { statusCode: DisconnectReason.loggedOut }))
+			end(new Boom('Intentional Logout', { statusCode: DisconnectReason.loggedOut }))
     }
     /** Waits for the connection to WA to reach a state */
 	const waitForConnectionUpdate = async(check: (u: Partial<ConnectionState>) => boolean, timeoutMs?: number) => {
@@ -399,6 +421,11 @@ export const makeSocket = ({
                         if(check(update)) {
                             resolve()
                         } else if(update.connection == 'close') {
+
+													ev.emit('statusFind', { 
+														statusFind: 'isDisconnected'
+												})
+
 							reject(update.lastDisconnect?.error || new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed }))
 						}
 					}
@@ -422,6 +449,10 @@ export const makeSocket = ({
     // QR gen
     ws.on('CB:iq,type:set,pair-device', async (stanza: BinaryNode) => {
         const postQR = async(qr: string) => {
+
+					ev.emit('statusFind', { 
+						statusFind: 'qrReadCode'
+				})
             if(printQRInTerminal) {
                 const QR = await import('qrcode-terminal').catch(err => {
                     logger.error('add `qrcode-terminal` as a dependency to auto-print QR')
@@ -450,11 +481,17 @@ export const makeSocket = ({
             const ref = refs.shift()
             if(!ref) {
                 end(new Boom('QR refs attempts ended', { statusCode: DisconnectReason.restartRequired }))
+
+								ev.emit('statusFind', { 
+									statusFind: 'qrReadFail'
+							})
                 return
             }
 
             const qr = [ref, noiseKeyB64, identityKeyB64, advB64].join(',')
-    
+						ev.emit('statusFind', { 
+							statusFind: 'qrReadCode'
+					})
             ev.emit('connection.update', { qr })
             postQR(qr)
 
@@ -486,16 +523,24 @@ export const makeSocket = ({
             logger.info({ jid: updatedCreds.me!.id }, 'registered connection, restart server')
 
             ev.emit('creds.update', updatedCreds)
-            ev.emit('connection.update', { isNewLogin: true, qr: undefined })
-
+						
+            ev.emit('connection.update', { connection: 'open', isNewLogin: true, qr: undefined })
+						
+						ev.emit('statusFind', { 
+							statusFind: 'qrReadSuccess'
+					})
             end(new Boom('Restart Required', { statusCode: DisconnectReason.restartRequired }))
         } catch(error) {
             logger.info({ trace: error.stack }, 'error in pairing')
+						ev.emit('statusFind', { 
+							statusFind: 'qrReadFail'
+					})
             end(error)
         }
     })
     // login complete
     ws.on('CB:success', async() => {
+
         if(!creds.serverHasPreKeys) {
             await uploadPreKeys()
         }
@@ -504,7 +549,9 @@ export const makeSocket = ({
         logger.info('opened connection to WA')
         clearTimeout(qrTimer) // will never happen in all likelyhood -- but just in case WA sends success on first try
 
-        ev.emit('connection.update', { connection: 'open' })
+				ev.emit('statusFind', { 
+					statusFind: 'isConnected'
+			})
     })
     
     ws.on('CB:ib,,offline', (node: BinaryNode) => {
@@ -521,10 +568,20 @@ export const makeSocket = ({
 
         const statusCode = +(node.attrs.code || DisconnectReason.restartRequired)
         end(new Boom('Stream Errored', { statusCode, data: node }))
+/*
+				ev.emit('statusFind', { 
+					statusFind: 'isDisconnected'
+			})
+*/
     })
     // stream fail, possible logout
     ws.on('CB:failure', (node: BinaryNode) => {
         const reason = +(node.attrs.reason || 500)
+
+				ev.emit('statusFind', { 
+					statusFind: 'tokenRemoved'
+			})
+			
         end(new Boom('Connection Failure', { statusCode: reason, data: node.attrs }))
     })
 
